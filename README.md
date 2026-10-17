@@ -68,5 +68,5 @@ docker run -d --name vinco-backend --env-file .env -p 8080:8080 vinco-backend
 - OTP / password-reset codes are delivered by your email/SMS provider; in
   non-production the API returns `devCode` so you can test the flow.
 - New profile photos start as `pending` and need `adminreviewphoto` approval.
-- `registerpushdevice` does not exist (no OS push); in-app notifications are real.
+- Expo push-device registration and delivery are introduced in the paired WIP PR: `registerpushdevice`, `unregisterpushdevice`, `push_devices`, and the best-effort Expo sender. Do not consider OS push production-ready until this branch is deployed, the migration runs, EAS/APNs/FCM credentials are configured, and physical-device tests pass.
 - Response payload shapes are documented in `RESPONSE_CONTRACT.md`.
