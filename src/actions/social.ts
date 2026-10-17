@@ -24,6 +24,7 @@ import { registerAction } from '../rpc.js';
 import type { ActionContext } from '../rpc.js';
 import { getPublicUserCard, blocksEither, hasActiveSubscription } from '../users.js';
 import { notifyUser } from '../notify.js';
+import { pushToUser } from '../push.js';
 
 // ---- local helpers ----
 
@@ -85,31 +86,24 @@ async function listDiscovery(args: any, ctx: ActionContext) {
     `SELECT preferred_gender, age_min, age_max, hobbies FROM profiles WHERE user_id = $1`,
     [viewer]
   );
-  const preferredGender: string = (prefs?.preferred_gender as string) ?? '';
-  const ageMin: number = (prefs?.age_min as number) ?? 18;
-  const ageMax: number = (prefs?.age_max as number) ?? 99;
+  const preferredGender: string = typeof args?.preferredGender === 'string'
+    ? args.preferredGender
+    : ((prefs?.preferred_gender as string) ?? '');
   const viewerHobbies: string = (prefs?.hobbies as string) ?? '';
 
-  // Viewer's city for the "closest" sort (no geo coordinates stored).
+  // "Closest" is only a same-city sorting proxy; no distance cutoff is applied.
   const viewerRow = await queryOne(`SELECT city FROM users WHERE id = $1`, [viewer]);
   const viewerCity: string = (viewerRow?.city as string) ?? '';
-
-  const now = new Date();
-  const maxBirth = new Date(Date.UTC(now.getUTCFullYear() - ageMin, now.getUTCMonth(), now.getUTCDate()))
-    .toISOString().slice(0, 10);
-  const minBirth = new Date(Date.UTC(now.getUTCFullYear() - ageMax, now.getUTCMonth(), now.getUTCDate()))
-    .toISOString().slice(0, 10);
 
   let where = `u.id <> $1
     AND u.status = 'active'
     AND p.profile_visible = TRUE
-    AND u.birth_date >= $2 AND u.birth_date <= $3
     AND NOT EXISTS (SELECT 1 FROM reactions r WHERE r.sender_id = $1 AND r.target_id = u.id)
     AND NOT EXISTS (SELECT 1 FROM matches m WHERE m.unmatched_at IS NULL
       AND ((m.user_a = $1 AND m.user_b = u.id) OR (m.user_b = $1 AND m.user_a = u.id)))
     AND NOT EXISTS (SELECT 1 FROM blocks b
       WHERE (b.blocker_id = $1 AND b.blocked_id = u.id) OR (b.blocker_id = u.id AND b.blocked_id = $1))`;
-  const params: any[] = [viewer, minBirth, maxBirth];
+  const params: any[] = [viewer];
   // Gender filter: free-text on both sides, so compare case-insensitively and
   // tolerate singular/plural ("Mujer" vs "Mujeres"). "Todos"/"Everyone"/etc.
   // (or empty) means no gender filter at all.
@@ -530,12 +524,25 @@ async function sendMessage(args: any, ctx: ActionContext) {
 
   const otherId = otherUserId(conv, viewer);
   const other = await queryOne(`SELECT first_name, locale FROM users WHERE id = $1`, [otherId]);
-  await notifyUser(
-    otherId, 'message',
-    t(other?.locale, `${ctx.user!.firstName} sent you a message`, `${ctx.user!.firstName} te envió un mensaje`),
-    body.length > 150 ? body.slice(0, 147) + '...' : body,
-    { conversationId, messageId: msg!.id, senderId: viewer }
+  const notificationTitle = t(
+    other?.locale,
+    `${ctx.user!.firstName} sent you a message`,
+    `${ctx.user!.firstName} te envió un mensaje`
   );
+  const notificationBody = body.length > 150 ? body.slice(0, 147) + '...' : body;
+  const notificationData = { conversationId, messageId: msg!.id, senderId: viewer };
+  const shouldNotify = await notifyUser(
+    otherId, 'message', notificationTitle, notificationBody, notificationData
+  );
+  // Keep lock-screen content private; the app can fetch the message after opening.
+  if (shouldNotify) {
+    void pushToUser(
+      otherId,
+      notificationTitle,
+      t(other?.locale, 'You have a new message on VINCÓ.', 'Tienes un nuevo mensaje en VINCÓ.'),
+      { type: 'message', conversationId, messageId: msg!.id, senderId: viewer }
+    );
+  }
 
   return {
     id: msg!.id,

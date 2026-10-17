@@ -12,19 +12,21 @@ const SETTING_FOR_TYPE: Record<string, string> = {
   report: 'security',
 };
 
+/** Returns true only when a notification was stored (i.e. the user did not opt out). */
 export async function notifyUser(
   userId: string,
   type: string,
   title: string,
   body: string,
   data: Record<string, any> = {}
-): Promise<void> {
+): Promise<boolean> {
   const settingKey = SETTING_FOR_TYPE[type] ?? 'marketing';
   const s: any = (await query(`SELECT * FROM notification_settings WHERE user_id = $1`, [userId]))[0];
-  if (s && s[settingKey] === false) return; // user opted out
+  if (s && s[settingKey] === false) return false; // user opted out
   await query(
     `INSERT INTO notifications (id, user_id, type, title, body, data)
      VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)`,
     [userId, type, title, body, JSON.stringify(data)]
   );
+  return true;
 }

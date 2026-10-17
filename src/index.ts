@@ -6,6 +6,7 @@ import { handleRpc, actionNames } from './rpc.js';
 import './actions/auth.js';
 import './actions/profile.js';
 import './actions/social.js';
+import './actions/push.js';
 import './actions/commerce.js';
 import './actions/admin.js';
 
