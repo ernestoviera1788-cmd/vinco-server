@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: vinco-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: NODE_ENV
+        value: production
+databases:
+  - name: vinco-db
+    databaseName: vinco
+    user: vinco
