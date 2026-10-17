@@ -24,6 +24,7 @@ import { registerAction } from '../rpc.js';
 import type { ActionContext } from '../rpc.js';
 import { getPublicUserCard, blocksEither, hasActiveSubscription } from '../users.js';
 import { notifyUser } from '../notify.js';
+import { pushToUser } from '../push.js';
 
 // ---- local helpers ----
 
@@ -530,12 +531,25 @@ async function sendMessage(args: any, ctx: ActionContext) {
 
   const otherId = otherUserId(conv, viewer);
   const other = await queryOne(`SELECT first_name, locale FROM users WHERE id = $1`, [otherId]);
-  await notifyUser(
-    otherId, 'message',
-    t(other?.locale, `${ctx.user!.firstName} sent you a message`, `${ctx.user!.firstName} te envió un mensaje`),
-    body.length > 150 ? body.slice(0, 147) + '...' : body,
-    { conversationId, messageId: msg!.id, senderId: viewer }
+  const notificationTitle = t(
+    other?.locale,
+    `${ctx.user!.firstName} sent you a message`,
+    `${ctx.user!.firstName} te envió un mensaje`
   );
+  const notificationBody = body.length > 150 ? body.slice(0, 147) + '...' : body;
+  const notificationData = { conversationId, messageId: msg!.id, senderId: viewer };
+  const shouldNotify = await notifyUser(
+    otherId, 'message', notificationTitle, notificationBody, notificationData
+  );
+  // Keep lock-screen content private; the app can fetch the message after opening.
+  if (shouldNotify) {
+    void pushToUser(
+      otherId,
+      notificationTitle,
+      t(other?.locale, 'You have a new message on VINCÓ.', 'Tienes un nuevo mensaje en VINCÓ.'),
+      { type: 'message', conversationId, messageId: msg!.id, senderId: viewer }
+    );
+  }
 
   return {
     id: msg!.id,
