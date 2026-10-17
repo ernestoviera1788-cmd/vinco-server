@@ -7,7 +7,7 @@ export async function pushToUser(userId: string, title: string, body: string, da
     );
     if (!rows.length) return;
     const messages = rows.map((row) => ({
-      to: row.expo_push_token, title, body, data, sound: 'default',
+      to: row.expo_push_token, title, body, data, sound: 'message.wav',
       channelId: 'messages', priority: 'high',
     }));
     for (let i = 0; i < messages.length; i += 100) {
